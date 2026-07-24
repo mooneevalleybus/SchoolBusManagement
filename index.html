@@ -708,6 +708,29 @@ function overviewRowCellsWithStopOrder(r){
       <td class="num" data-label="Pax">${r.pax}</td>`;
 }
 
+// Extract a HH:MM time (12h or 24h, optional AM/PM) from free text, as minutes since midnight.
+// Returns null if no time found, so text without a time sorts after text with one.
+function parseTimeMinutes(text){
+  if(!text) return null;
+  const m = String(text).match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+  if(!m) return null;
+  let h = parseInt(m[1],10);
+  const min = parseInt(m[2],10);
+  const ap = m[3] ? m[3].toUpperCase() : null;
+  if(ap === "PM" && h !== 12) h += 12;
+  if(ap === "AM" && h === 12) h = 0;
+  return h*60+min;
+}
+
+// Sort: earlier time first, then alphabetical as a tiebreaker (or when no time is present at all).
+function timeThenAlpha(aText, bText){
+  const at = parseTimeMinutes(aText), bt = parseTimeMinutes(bText);
+  if(at !== null && bt !== null && at !== bt) return at - bt;
+  if(at !== null && bt === null) return -1;
+  if(at === null && bt !== null) return 1;
+  return String(aText||"").localeCompare(String(bText||""));
+}
+
 function renderOverview(amRoutes, pmRoutes){
   amRoutes = amRoutes || window._amCache || demo.am;
   pmRoutes = pmRoutes || window._pmCache || demo.pm;
@@ -744,7 +767,14 @@ function renderOverview(amRoutes, pmRoutes){
         <th>Pax</th>
       </tr>`;
 
-    body.innerHTML = filtered.length ? filtered.map(r=>`<tr>${overviewRowCellsWithStopOrder(r)}</tr>`).join("")
+    const sorted = [...filtered].sort((a,b)=>{
+      const aTime = currentRun==="am" ? (a.depotStart||a.firstStopDeparture) : a.departureTime;
+      const bTime = currentRun==="am" ? (b.depotStart||b.firstStopDeparture) : b.departureTime;
+      const byTime = timeThenAlpha(aTime, bTime);
+      return byTime !== 0 ? byTime : String(a.route||"").localeCompare(String(b.route||""));
+    });
+
+    body.innerHTML = sorted.length ? sorted.map(r=>`<tr>${overviewRowCellsWithStopOrder(r)}</tr>`).join("")
       : `<tr><td colspan="5"><div class="empty-state">No routes match your filters.</div></td></tr>`;
     return;
   }
@@ -757,7 +787,7 @@ function renderOverview(amRoutes, pmRoutes){
     return;
   }
 
-  // group by stopOrder, preserving first-seen order of each group
+  // group by stopOrder, then sort groups (earlier time first, alphabetical fallback/tiebreak)
   const groups = [];
   const groupIndex = {};
   filtered.forEach(r=>{
@@ -767,6 +797,17 @@ function renderOverview(amRoutes, pmRoutes){
       groups.push({ key, rows:[] });
     }
     groups[groupIndex[key]].rows.push(r);
+  });
+
+  groups.sort((a,b)=>timeThenAlpha(a.key, b.key));
+
+  groups.forEach(g=>{
+    g.rows.sort((a,b)=>{
+      const aTime = currentRun==="am" ? (a.depotStart||a.firstStopDeparture) : a.departureTime;
+      const bTime = currentRun==="am" ? (b.depotStart||b.firstStopDeparture) : b.departureTime;
+      const byTime = timeThenAlpha(aTime, bTime);
+      return byTime !== 0 ? byTime : String(a.route||"").localeCompare(String(b.route||""));
+    });
   });
 
   body.innerHTML = groups.map(g=>`
