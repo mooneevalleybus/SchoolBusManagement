@@ -472,6 +472,12 @@ async function loadAllFromSharePoint(){
       console.error(`No library named "${CONFIG.documentLibrary}" found. Available libraries listed above — check CONFIG.documentLibrary matches one exactly (case/spacing sensitive).`);
     }
     const activeDrive = runsDrive || drive.value[0];
+    if(runsDrive){
+      try{
+        const topLevel = await graphGet(`/drives/${activeDrive.id}/root/children`);
+        console.log(`Folders/files inside "${activeDrive.name}":`, topLevel.value.map(i=>i.name + (i.folder?" (folder)":" (file)")));
+      }catch(e){ console.warn("Could not list top-level folders", e); }
+    }
 
     async function folderFiles(folderName){
       if(!runsDrive) return [];
