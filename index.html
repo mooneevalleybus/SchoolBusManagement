@@ -351,7 +351,7 @@ const CONFIG = {
   siteHostname: "mvbus.sharepoint.com",
   siteName: "MooneeValleyBusLines",
   lists: {
-    routes: "SchoolBusRoutes",       // fields: Route, DepotStart, FirstStopDeparture, StopOrder, StartLocation, DepartureTime, PMStopOrder, Pax, Bus, Driver, Status
+    routes: "SchoolBusRoutes",       // fields: Route, DepotStart, FirstStopDeparture, StopOrder, StartLocation, DepartureTime, PMStopOrder, PaxAM, PaxPM, Bus, Driver, Status
     contacts: "SchoolBusContacts",   // fields: Name, Phone
   },
   // All documents live in the "School Runs" document library, in these subfolders:
@@ -363,7 +363,7 @@ const CONFIG = {
   },
   // Staff PIN required after Microsoft sign-in, before data loads.
   // This is a simple deterrent, not real security — anyone reading this file can see it.
-  pin: "2468",
+  pin: "8318",
 };
 
 let accessToken = null;
@@ -539,17 +539,17 @@ async function loadAllFromSharePoint(){
     const siteId = await getSiteId();
 
     // Routes list -> AM/PM overview tab
-    // Expected fields: Route, DepotStart, FirstStopDeparture, StopOrder, StartLocation, DepartureTime, PMStopOrder, Pax, Bus, Driver, Status
+    // Expected fields: Route, DepotStart, FirstStopDeparture, StopOrder, StartLocation, DepartureTime, PMStopOrder, PaxAM, PaxPM, Bus, Driver, Status
     const routesList = await graphGet(`/sites/${siteId}/lists/${CONFIG.lists.routes}/items?expand=fields`);
     const allRoutes = routesList.value.map(i=>i.fields);
 
     const amRoutes = allRoutes.map(f=>({
       route:f.Route, depotStart:f.DepotStart, firstStopDeparture:f.FirstStopDeparture,
-      stopOrder:f.StopOrder, pax:f.Pax, bus:f.Bus, driver:f.Driver, status:(f.Status||"ok").toLowerCase()
+      stopOrder:f.StopOrder, pax:f.PaxAM, bus:f.Bus, driver:f.Driver, status:(f.Status||"ok").toLowerCase()
     }));
     const pmRoutes = allRoutes.map(f=>({
       route:f.Route, startLocation:f.StartLocation, departureTime:f.DepartureTime,
-      stopOrder:f.PMStopOrder, pax:f.Pax, bus:f.Bus, driver:f.Driver, status:(f.Status||"ok").toLowerCase()
+      stopOrder:f.PMStopOrder, pax:f.PaxPM, bus:f.Bus, driver:f.Driver, status:(f.Status||"ok").toLowerCase()
     }));
 
     // Contacts list -> Contact Name, Phone Number
