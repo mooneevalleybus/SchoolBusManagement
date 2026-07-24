@@ -302,8 +302,8 @@ const CONFIG = {
   siteHostname: "mvbus.sharepoint.com",
   siteName: "MooneeValleyBusLines",
   lists: {
-    routes: "SchoolBusRoutes",       // fields expected: Route, DepotStart, FirstStopDeparture, StopOrder, StartLocation, DepartureTime, PMStopOrder, Pax, Bus, Driver, Status, Stops (multiline)
-    contacts: "SchoolBusContacts",   // fields expected: Name, Type, Role, Phone, Email, Route
+    routes: "SchoolBusRoutes",       // fields: Route, DepotStart, FirstStopDeparture, StopOrder, StartLocation, DepartureTime, PMStopOrder, Pax, Bus, Driver, Status
+    contacts: "SchoolBusContacts",   // fields: Name, Phone
   },
   // All documents live in the "School Runs" document library, in these subfolders:
   documentLibrary: "School Runs",
@@ -382,10 +382,16 @@ const busminderLinks = [
 function loadMsal(){
   return new Promise((resolve,reject)=>{
     if(window.msal){resolve();return;}
-    const s=document.createElement("script");
-    s.src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js";
-    s.onload=resolve; s.onerror=reject;
-    document.head.appendChild(s);
+    const primary = "https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js";
+    const fallback = "https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js";
+    function tryLoad(src, onFail){
+      const s=document.createElement("script");
+      s.src=src;
+      s.onload=resolve;
+      s.onerror=onFail;
+      document.head.appendChild(s);
+    }
+    tryLoad(primary, ()=>tryLoad(fallback, reject));
   });
 }
 
@@ -413,6 +419,7 @@ async function signIn(){
   }catch(err){
     console.error("Sign-in failed, staying in demo mode:", err);
     document.getElementById("configBanner").classList.add("show");
+    document.getElementById("authStatus").textContent = "Sign-in failed — see console (F12) for details";
   }
 }
 document.getElementById("signInBtn").addEventListener("click", signIn);
