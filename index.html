@@ -236,6 +236,10 @@
       <h2>Manifests</h2>
       <p class="sub">Documents from the manifests library. Open in browser, preview inline, or download.</p>
       <div class="toolbar">
+        <div class="ampm-toggle" id="manifestAmpmToggle">
+          <button class="ampm-btn active" data-run="am">AM</button>
+          <button class="ampm-btn" data-run="pm">PM</button>
+        </div>
         <input type="text" id="manifestSearch" placeholder="Search manifests...">
       </div>
       <div id="manifestList"></div>
@@ -296,13 +300,18 @@ const CONFIG = {
   clientId: "c3b638fb-9c8b-4583-a1ab-cbd08fec7618", // MVBL School Bus Management app registration
   redirectUri: window.location.origin + window.location.pathname,
   siteHostname: "mvbus.sharepoint.com",
-  siteName: "Workshop-MooneeValleyBusLines", // or a dedicated School Bus site
+  siteName: "MooneeValleyBusLines",
   lists: {
     routes: "SchoolBusRoutes",       // fields expected: Route, DepotStart, FirstStopDeparture, StopOrder, StartLocation, DepartureTime, PMStopOrder, Pax, Bus, Driver, Status, Stops (multiline)
     contacts: "SchoolBusContacts",   // fields expected: Name, Type, Role, Phone, Email, Route
   },
-  manifestLibrary: "SchoolBusManifests", // document library name
-  routeInfoLibrary: "SchoolBusRouteInfo", // document library for route instructions / turn-by-turn nav
+  // All documents live in the "School Runs" document library, in these subfolders:
+  documentLibrary: "School Runs",
+  folders: {
+    manifestsAM: "SchoolBusManifest - AM",
+    manifestsPM: "SchoolBusManifest - PM",
+    routeInfo: "SchoolBusRouteInfo",
+  },
 };
 
 let accessToken = null;
@@ -347,11 +356,17 @@ const demo = {
     { name:"Tullamarine Primary School", phone:"03 9333 0000" },
     { name:"Keilor North Primary School", phone:"03 9333 0111" },
   ],
-  manifests: [
-    { name:"R1 Tullamarine Loop – Manifest.xlsx", modified:"Updated yesterday", type:"xlsx" },
-    { name:"R2 Keilor North – Manifest.xlsx", modified:"Updated 3 days ago", type:"xlsx" },
-    { name:"R3 St Albans East – Manifest.xlsx", modified:"Updated 3 days ago", type:"xlsx" },
-    { name:"R4 Sydenham Express – Manifest.xlsx", modified:"Updated today", type:"xlsx" },
+  manifestsAM: [
+    { name:"R1 Tullamarine Loop – AM Manifest.xlsx", modified:"Updated yesterday", type:"xlsx" },
+    { name:"R2 Keilor North – AM Manifest.xlsx", modified:"Updated 3 days ago", type:"xlsx" },
+    { name:"R3 St Albans East – AM Manifest.xlsx", modified:"Updated 3 days ago", type:"xlsx" },
+    { name:"R4 Sydenham Express – AM Manifest.xlsx", modified:"Updated today", type:"xlsx" },
+  ],
+  manifestsPM: [
+    { name:"R1 Tullamarine Loop – PM Manifest.xlsx", modified:"Updated yesterday", type:"xlsx" },
+    { name:"R2 Keilor North – PM Manifest.xlsx", modified:"Updated 3 days ago", type:"xlsx" },
+    { name:"R3 St Albans East – PM Manifest.xlsx", modified:"Updated 3 days ago", type:"xlsx" },
+    { name:"R4 Sydenham Express – PM Manifest.xlsx", modified:"Updated today", type:"xlsx" },
   ],
 };
 
@@ -442,29 +457,32 @@ async function loadAllFromSharePoint(){
       name:i.fields.Name, phone:i.fields.Phone
     }));
 
-    // Document libraries — manifests and route info (route instructions / turn-by-turn nav)
+    // Documents live in the "School Runs" library, in named subfolders (CONFIG.folders)
     const drive = await graphGet(`/sites/${siteId}/drives`);
-    const manifestDrive = drive.value.find(d=>d.name===CONFIG.manifestLibrary) || drive.value[0];
-    const items = await graphGet(`/drives/${manifestDrive.id}/root/children`);
-    const manifests = items.value.filter(f=>f.file).map(f=>({
-      name:f.name, modified:new Date(f.lastModifiedDateTime).toLocaleDateString(),
-      webUrl:f.webUrl, downloadUrl:f["@microsoft.graph.downloadUrl"], id:f.id, driveId:manifestDrive.id
-    }));
+    const runsDrive = drive.value.find(d=>d.name===CONFIG.documentLibrary) || drive.value[0];
 
-    const routeInfoDrive = drive.value.find(d=>d.name===CONFIG.routeInfoLibrary);
-    let routeInfo = [];
-    if(routeInfoDrive){
-      const routeItems = await graphGet(`/drives/${routeInfoDrive.id}/root/children`);
-      routeInfo = routeItems.value.filter(f=>f.file).map(f=>({
-        name:f.name, modified:new Date(f.lastModifiedDateTime).toLocaleDateString(),
-        webUrl:f.webUrl, downloadUrl:f["@microsoft.graph.downloadUrl"], id:f.id, driveId:routeInfoDrive.id
-      }));
+    async function folderFiles(folderName){
+      try{
+        const encodedPath = encodeURIComponent(folderName).replace(/%2F/g,"/");
+        const res = await graphGet(`/drives/${runsDrive.id}/root:/${encodedPath}:/children`);
+        return res.value.filter(f=>f.file).map(f=>({
+          name:f.name, modified:new Date(f.lastModifiedDateTime).toLocaleDateString(),
+          webUrl:f.webUrl, downloadUrl:f["@microsoft.graph.downloadUrl"], id:f.id, driveId:runsDrive.id
+        }));
+      }catch(e){
+        console.warn(`Folder not found or empty: ${folderName}`, e);
+        return [];
+      }
     }
+
+    const manifestsAM = await folderFiles(CONFIG.folders.manifestsAM);
+    const manifestsPM = await folderFiles(CONFIG.folders.manifestsPM);
+    const routeInfo = await folderFiles(CONFIG.folders.routeInfo);
 
     renderOverview(amRoutes, pmRoutes);
     renderRoutes(routeInfo);
     renderContacts(contacts);
-    renderManifests(manifests);
+    renderManifests(manifestsAM, manifestsPM);
     renderBusminderLinks();
   }catch(err){
     console.error("Failed to load SharePoint data, falling back to demo:", err);
@@ -631,9 +649,17 @@ function renderContacts(contacts){
   window._contactsCache = contacts;
 }
 
-function renderManifests(manifests){
+let currentManifestRun = "am";
+
+function renderManifests(manifestsAM, manifestsPM){
+  manifestsAM = manifestsAM || window._manifestsAMCache || demo.manifestsAM;
+  manifestsPM = manifestsPM || window._manifestsPMCache || demo.manifestsPM;
+  window._manifestsAMCache = manifestsAM;
+  window._manifestsPMCache = manifestsPM;
+
   const list = document.getElementById("manifestList");
   const search = document.getElementById("manifestSearch").value.toLowerCase();
+  const manifests = currentManifestRun === "am" ? manifestsAM : manifestsPM;
   const filtered = manifests.filter(m=>!search || m.name.toLowerCase().includes(search));
   list.innerHTML = filtered.length ? filtered.map(m=>`
     <div class="doc-row">
@@ -650,8 +676,16 @@ function renderManifests(manifests){
       </div>
     </div>
   `).join("") : `<div class="empty-state">No manifests match your search.</div>`;
-  window._manifestsCache = manifests;
 }
+
+document.getElementById("manifestAmpmToggle").addEventListener("click",(e)=>{
+  const btn = e.target.closest(".ampm-btn");
+  if(!btn) return;
+  document.querySelectorAll("#manifestAmpmToggle .ampm-btn").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  currentManifestRun = btn.dataset.run;
+  renderManifests();
+});
 
 function renderBusminderLinks(){
   const el = document.getElementById("busminderLinks");
@@ -673,7 +707,7 @@ function renderAllDemo(){
   renderOverview(demo.am, demo.pm);
   renderRoutes(demo.routeInfo);
   renderContacts(demo.contacts);
-  renderManifests(demo.manifests);
+  renderManifests(demo.manifestsAM, demo.manifestsPM);
   renderBusminderLinks();
 }
 
@@ -694,7 +728,7 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
    ------------------------------------------------------------------------- */
 document.getElementById("overviewSearch").addEventListener("input", ()=>renderOverview());
 document.getElementById("contactSearch").addEventListener("input", ()=>renderContacts(window._contactsCache||demo.contacts));
-document.getElementById("manifestSearch").addEventListener("input", ()=>renderManifests(window._manifestsCache||demo.manifests));
+document.getElementById("manifestSearch").addEventListener("input", ()=>renderManifests());
 document.getElementById("routeInfoSearch").addEventListener("input", ()=>renderRoutes(window._routeInfoCache||demo.routeInfo));
 
 /* -------------------------------------------------------------------------
