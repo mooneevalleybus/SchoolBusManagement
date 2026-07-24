@@ -767,12 +767,7 @@ function renderOverview(amRoutes, pmRoutes){
         <th>Pax</th>
       </tr>`;
 
-    const sorted = [...filtered].sort((a,b)=>{
-      const aTime = currentRun==="am" ? (a.depotStart||a.firstStopDeparture) : a.departureTime;
-      const bTime = currentRun==="am" ? (b.depotStart||b.firstStopDeparture) : b.departureTime;
-      const byTime = timeThenAlpha(aTime, bTime);
-      return byTime !== 0 ? byTime : String(a.route||"").localeCompare(String(b.route||""));
-    });
+    const sorted = [...filtered].sort((a,b)=>String(a.route||"").localeCompare(String(b.route||"")));
 
     body.innerHTML = sorted.length ? sorted.map(r=>`<tr>${overviewRowCellsWithStopOrder(r)}</tr>`).join("")
       : `<tr><td colspan="5"><div class="empty-state">No routes match your filters.</div></td></tr>`;
@@ -799,15 +794,10 @@ function renderOverview(amRoutes, pmRoutes){
     groups[groupIndex[key]].rows.push(r);
   });
 
-  groups.sort((a,b)=>timeThenAlpha(a.key, b.key));
+  groups.sort((a,b)=>String(a.key||"").localeCompare(String(b.key||"")));
 
   groups.forEach(g=>{
-    g.rows.sort((a,b)=>{
-      const aTime = currentRun==="am" ? (a.depotStart||a.firstStopDeparture) : a.departureTime;
-      const bTime = currentRun==="am" ? (b.depotStart||b.firstStopDeparture) : b.departureTime;
-      const byTime = timeThenAlpha(aTime, bTime);
-      return byTime !== 0 ? byTime : String(a.route||"").localeCompare(String(b.route||""));
-    });
+    g.rows.sort((a,b)=>String(a.route||"").localeCompare(String(b.route||"")));
   });
 
   body.innerHTML = groups.map(g=>`
