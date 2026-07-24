@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>School Bus Management — MVBL</title>
+<style>
+  :root{
+    --navy:#0B2A4A;
+    --navy-deep:#071B32;
+    --teal:#1B8A8A;
+    --teal-light:#E4F3F1;
+    --amber:#E8A33D;
+    --bg:#F5F7F8;
+    --panel:#FFFFFF;
+    --line:#DCE3E7;
+    --text:#1F2D36;
+    --text-soft:#5B6B74;
+    --danger:#C4472A;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:"Segoe UI", system-ui, -apple-system, sans-serif;
+    background:var(--bg);
+    color:var(--text);
+  }
+
+  /* ---- Header / route-strip signature ---- */
+  header.topbar{
+    background:var(--navy);
+    color:#fff;
+    padding:0;
+    position:relative;
+    overflow:hidden;
+  }
+  .topbar-inner{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:18px 28px 14px;
+    position:relative;
+    z-index:2;
+  }
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand-mark{
+    width:34px;height:34px;border-radius:8px;
+    background:var(--teal);
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:15px;color:var(--navy-deep);
+  }
+  .brand h1{font-size:18px;margin:0;font-weight:600;letter-spacing:.2px;}
+  .brand p{margin:0;font-size:11.5px;color:#9FB4C6;letter-spacing:.4px;text-transform:uppercase;}
+  .authbox{display:flex;align-items:center;gap:10px;font-size:13px;color:#CBD9E2;}
+  .authbox button{
+    background:var(--teal);color:#fff;border:none;border-radius:6px;
+    padding:8px 14px;font-size:13px;cursor:pointer;font-weight:600;
+  }
+  .authbox button.secondary{background:transparent;border:1px solid #33506A;color:#CBD9E2;}
+
+  /* route-line decoration */
+  .route-strip{
+    height:22px;position:relative;border-top:1px solid #16324F;
+    background:linear-gradient(90deg, var(--navy) 0%, var(--navy-deep) 100%);
+  }
+  .route-strip svg{position:absolute;top:0;left:0;width:100%;height:100%;}
+
+  nav.tabs{
+    display:flex;gap:2px;background:var(--navy-deep);padding:0 24px;
+  }
+  nav.tabs button{
+    background:transparent;border:none;color:#9FB4C6;padding:12px 18px;
+    font-size:13.5px;font-weight:600;cursor:pointer;letter-spacing:.2px;
+    border-bottom:3px solid transparent;
+  }
+  nav.tabs button.active{color:#fff;border-bottom-color:var(--teal);}
+  nav.tabs button:hover{color:#fff;}
+
+  main{max-width:1180px;margin:0 auto;padding:26px 24px 60px;}
+  .panel{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:22px;margin-bottom:20px;
+  }
+  .panel h2{margin:0 0 4px;font-size:16px;}
+  .panel .sub{color:var(--text-soft);font-size:12.5px;margin:0 0 16px;}
+
+  .status-pill{
+    display:inline-flex;align-items:center;gap:5px;padding:3px 9px;
+    border-radius:20px;font-size:11.5px;font-weight:700;letter-spacing:.3px;
+  }
+  .status-pill.ok{background:#E4F3ED;color:#1E7A4E;}
+  .status-pill.warn{background:#FBF1DF;color:#9C6A12;}
+  .status-pill.off{background:#F1E4E4;color:#9C3A2E;}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th{
+    text-align:left;padding:10px 12px;background:var(--teal-light);color:var(--navy);
+    font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--line);
+  }
+  td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  tr:hover td{background:#FAFCFD;}
+  .num{font-variant-numeric:tabular-nums;}
+  .group-heading td{
+    background:var(--navy);color:#fff;font-weight:700;font-size:12.5px;
+    letter-spacing:.3px;padding:9px 12px;border-bottom:none;
+  }
+  .group-heading:hover td{background:var(--navy);}
+
+  .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
+  .toolbar input[type=text]{
+    padding:8px 12px;border:1px solid var(--line);border-radius:6px;font-size:13px;min-width:220px;
+  }
+  .toolbar select{padding:8px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;}
+  .ampm-toggle{display:flex;border:1px solid var(--navy);border-radius:7px;overflow:hidden;}
+  .ampm-btn{background:#fff;border:none;padding:8px 18px;font-size:13px;font-weight:700;color:var(--navy);cursor:pointer;letter-spacing:.3px;}
+  .ampm-btn.active{background:var(--navy);color:#fff;}
+  .ampm-btn:not(.active):hover{background:var(--teal-light);}
+  .chip{
+    background:var(--teal-light);color:var(--navy);border-radius:20px;padding:6px 12px;
+    font-size:12px;font-weight:600;
+  }
+
+  .doc-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;background:#FCFDFD;}
+  .doc-meta{display:flex;align-items:center;gap:12px;}
+  .doc-icon{width:34px;height:34px;border-radius:7px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;}
+  .doc-name{font-weight:600;font-size:13.5px;}
+  .doc-sub{font-size:11.5px;color:var(--text-soft);}
+  .doc-actions{display:flex;gap:8px;}
+  .doc-actions button{
+    border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;color:var(--navy);font-weight:600;
+  }
+  .doc-actions button.primary{background:var(--teal);border-color:var(--teal);color:#fff;}
+  .doc-actions button:hover{filter:brightness(0.97);}
+
+  .contact-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;}
+  .contact-card{border:1px solid var(--line);border-radius:9px;padding:14px;background:#FCFDFD;}
+  .contact-card .name{font-weight:700;font-size:14px;}
+  .contact-card .role{font-size:11.5px;color:var(--teal);font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px;}
+  .contact-card .row{font-size:12.5px;color:var(--text-soft);margin-top:3px;}
+  .contact-card .row a{color:var(--navy);text-decoration:none;font-weight:600;}
+
+  .route-card{border:1px solid var(--line);border-radius:9px;padding:16px;margin-bottom:12px;background:#FCFDFD;}
+  .route-card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .route-card-head .rname{font-weight:700;font-size:14.5px;color:var(--navy);}
+  .route-stops{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+  .stop{background:var(--teal-light);color:var(--navy);border-radius:6px;padding:4px 9px;font-size:11.5px;font-weight:600;}
+
+  .empty-state{text-align:center;padding:40px 20px;color:var(--text-soft);}
+  .empty-state .big{font-size:28px;margin-bottom:6px;}
+
+  .link-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;background:#FCFDFD;}
+  .link-meta{display:flex;align-items:center;gap:12px;}
+  .link-icon{width:34px;height:34px;border-radius:7px;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;}
+  .link-name{font-weight:600;font-size:13.5px;color:var(--text);}
+  .link-sub{font-size:11.5px;color:var(--text-soft);}
+  .link-row a.go{border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;color:var(--navy);font-weight:600;text-decoration:none;}
+  .link-row a.go:hover{background:var(--teal-light);}
+
+  .config-banner{
+    background:#FBF1DF;border:1px solid #E9CE9C;color:#7A5411;border-radius:8px;
+    padding:10px 14px;font-size:12.5px;margin-bottom:18px;display:none;
+  }
+  .config-banner.show{display:block;}
+  footer{text-align:center;color:var(--text-soft);font-size:11.5px;padding:18px;}
+  @media (max-width:720px){
+    .topbar-inner{flex-direction:column;align-items:flex-start;gap:10px;}
+    nav.tabs{overflow-x:auto;}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="brand-mark">MV</div>
+      <div>
+        <h1>School Bus Management</h1>
+        <p>Moonee Valley Bus Lines</p>
+      </div>
+    </div>
+    <div class="authbox" id="authbox">
+      <span id="authStatus">Not signed in</span>
+      <button id="signInBtn">Sign in</button>
+    </div>
+  </div>
+  <div class="route-strip">
+    <svg viewBox="0 0 1000 22" preserveAspectRatio="none">
+      <line x1="0" y1="11" x2="1000" y2="11" stroke="#1B8A8A" stroke-width="2" stroke-dasharray="6 8" opacity="0.55"/>
+    </svg>
+  </div>
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="overview">Quick Overview</button>
+    <button class="tab-btn" data-tab="manifests">Manifests</button>
+    <button class="tab-btn" data-tab="routes">Route Info</button>
+    <button class="tab-btn" data-tab="contacts">Contact Details</button>
+    <button class="tab-btn" data-tab="busminder">Busminder</button>
+  </nav>
+</header>
+
+<main>
+  <div class="config-banner" id="configBanner">
+    Running in demo mode with sample data — SharePoint connection isn't configured yet. See the CONFIG block at the top of the script for what to fill in.
+  </div>
+
+  <!-- QUICK OVERVIEW -->
+  <section class="tab-panel" id="tab-overview">
+    <div class="panel">
+      <h2>Today's Routes at a Glance</h2>
+      <p class="sub">Live from the routes list — split by AM and PM run.</p>
+      <div class="toolbar">
+        <div class="ampm-toggle" id="ampmToggle">
+          <button class="ampm-btn active" data-run="am">AM</button>
+          <button class="ampm-btn" data-run="pm">PM</button>
+        </div>
+        <div class="ampm-toggle" id="viewToggle">
+          <button class="ampm-btn active" data-view="grouped">Grouped by Stop Order</button>
+          <button class="ampm-btn" data-view="list">Full List</button>
+        </div>
+        <input type="text" id="overviewSearch" placeholder="Search route, driver or bus...">
+        <span class="chip" id="overviewCount">0 routes</span>
+      </div>
+      <table>
+        <thead id="overviewHead">
+          <!-- populated per AM/PM -->
+        </thead>
+        <tbody id="overviewBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- MANIFESTS -->
+  <section class="tab-panel" id="tab-manifests" style="display:none;">
+    <div class="panel">
+      <h2>Manifests</h2>
+      <p class="sub">Documents from the manifests library. Open in browser, preview inline, or download.</p>
+      <div class="toolbar">
+        <input type="text" id="manifestSearch" placeholder="Search manifests...">
+      </div>
+      <div id="manifestList"></div>
+    </div>
+  </section>
+
+  <!-- ROUTE INFO -->
+  <section class="tab-panel" id="tab-routes" style="display:none;">
+    <div class="panel">
+      <h2>Route Info</h2>
+      <p class="sub">Route instruction sheets, turn-by-turn navigation and stop notes. Open in browser or download.</p>
+      <div class="toolbar">
+        <input type="text" id="routeInfoSearch" placeholder="Search route info...">
+      </div>
+      <div id="routeList"></div>
+    </div>
+  </section>
+
+  <!-- CONTACTS -->
+  <section class="tab-panel" id="tab-contacts" style="display:none;">
+    <div class="panel">
+      <h2>Contact Details</h2>
+      <p class="sub">Drivers, school contacts and parents/guardians on file.</p>
+      <div class="toolbar">
+        <input type="text" id="contactSearch" placeholder="Search contacts...">
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Contact Name</th>
+            <th>Phone Number</th>
+          </tr>
+        </thead>
+        <tbody id="contactGrid"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- BUSMINDER -->
+  <section class="tab-panel" id="tab-busminder" style="display:none;">
+    <div class="panel">
+      <h2>Busminder</h2>
+      <p class="sub">Helpful links for Busminder and related tasks.</p>
+      <div id="busminderLinks"></div>
+    </div>
+  </section>
+</main>
+
+<footer>School Bus Management · MVBL internal tool</footer>
+
+<script>
+/* =========================================================================
+   CONFIG — fill these in to connect to real SharePoint data.
+   Reuses the same Azure AD app registration / PKCE pattern as Workshop Hub.
+   ========================================================================= */
+const CONFIG = {
+  tenantId: "1107f160-8e52-466d-a70d-b6ae79cd903b", // Azure AD tenant ID
+  clientId: "c3b638fb-9c8b-4583-a1ab-cbd08fec7618", // MVBL School Bus Management app registration
+  redirectUri: window.location.origin + window.location.pathname,
+  siteHostname: "mvbus.sharepoint.com",
+  siteName: "Workshop-MooneeValleyBusLines", // or a dedicated School Bus site
+  lists: {
+    routes: "SchoolBusRoutes",       // fields expected: Route, DepotStart, FirstStopDeparture, StopOrder, StartLocation, DepartureTime, PMStopOrder, Pax, Bus, Driver, Status, Stops (multiline)
+    contacts: "SchoolBusContacts",   // fields expected: Name, Type, Role, Phone, Email, Route
+  },
+  manifestLibrary: "SchoolBusManifests", // document library name
+  routeInfoLibrary: "SchoolBusRouteInfo", // document library for route instructions / turn-by-turn nav
+};
+
+let accessToken = null;
+let USE_DEMO = true; // flips to false once sign-in succeeds
+
+/* -------------------------------------------------------------------------
+   DEMO DATA — shown until SharePoint is wired up, so the dashboard is
+   fully browsable/testable immediately.
+   ------------------------------------------------------------------------- */
+const demo = {
+  am: [
+    { route:"R1 – Tullamarine Loop", depotStart:"7:30 AM", firstStopDeparture:"7:45 AM", pax:42, bus:"Bus 12", driver:"J. Alvarez", status:"ok",
+      stopOrder:"Canowindra → Yirramboi" },
+    { route:"R2 – Keilor North", depotStart:"7:45 AM", firstStopDeparture:"8:00 AM", pax:38, bus:"Bus 04", driver:"S. Nguyen", status:"ok",
+      stopOrder:"Yirramboi (wait until 8:05 AM) → Canowindra" },
+    { route:"R3 – St Albans East", depotStart:"7:55 AM", firstStopDeparture:"8:10 AM", pax:29, bus:"Bus 09", driver:"M. Costa", status:"warn",
+      stopOrder:"Canowindra → Yirramboi" },
+    { route:"R4 – Sydenham Express", depotStart:"7:40 AM", firstStopDeparture:"7:55 AM", pax:47, bus:"Bus 17", driver:"D. Higginson", status:"off",
+      stopOrder:"Yirramboi (wait until 7:50 AM) → Canowindra" },
+  ],
+  pm: [
+    { route:"R1 – Tullamarine Loop", startLocation:"Primary School Gate", departureTime:"3:15 PM", pax:40, bus:"Bus 12", driver:"J. Alvarez", status:"ok",
+      stopOrder:"3:35 Canowindra → Yirramboi" },
+    { route:"R2 – Keilor North", startLocation:"Keilor North PS", departureTime:"3:20 PM", pax:36, bus:"Bus 04", driver:"S. Nguyen", status:"ok",
+      stopOrder:"3:35 Yirramboi → Canowindra" },
+    { route:"R3 – St Albans East", startLocation:"St Albans Secondary", departureTime:"3:30 PM", pax:28, bus:"Bus 09", driver:"M. Costa", status:"warn",
+      stopOrder:"Yirramboi — wait for 3:35 Canowindra → Yirramboi to arrive" },
+    { route:"R4 – Sydenham Express", startLocation:"Watergardens PS", departureTime:"3:25 PM", pax:45, bus:"Bus 17", driver:"D. Higginson", status:"off",
+      stopOrder:"3:35 Canowindra → Yirramboi" },
+  ],
+  routeInfo: [
+    { name:"R1 Tullamarine Loop – Route Instructions.pdf", modified:"Updated 2 weeks ago", type:"pdf" },
+    { name:"R1 Tullamarine Loop – Turn by Turn Nav.pdf", modified:"Updated 2 weeks ago", type:"pdf" },
+    { name:"R2 Keilor North – Route Instructions.pdf", modified:"Updated 1 month ago", type:"pdf" },
+    { name:"R3 St Albans East – Route Instructions.pdf", modified:"Updated 1 month ago", type:"pdf" },
+    { name:"R4 Sydenham Express – Route Instructions.pdf", modified:"Updated 3 days ago", type:"pdf" },
+  ],
+  contacts: [
+    { name:"J. Alvarez", phone:"0412 000 111" },
+    { name:"S. Nguyen", phone:"0412 000 222" },
+    { name:"M. Costa", phone:"0412 000 333" },
+    { name:"Tullamarine Primary School", phone:"03 9333 0000" },
+    { name:"Keilor North Primary School", phone:"03 9333 0111" },
+  ],
+  manifests: [
+    { name:"R1 Tullamarine Loop – Manifest.xlsx", modified:"Updated yesterday", type:"xlsx" },
+    { name:"R2 Keilor North – Manifest.xlsx", modified:"Updated 3 days ago", type:"xlsx" },
+    { name:"R3 St Albans East – Manifest.xlsx", modified:"Updated 3 days ago", type:"xlsx" },
+    { name:"R4 Sydenham Express – Manifest.xlsx", modified:"Updated today", type:"xlsx" },
+  ],
+};
+
+// Busminder — helpful links. Edit this list directly to add/remove/reorder links.
+const busminderLinks = [
+  { name:"Busminder Login", url:"https://www.busminder.com.au/", sub:"Sign in to Busminder", icon:"🔗" },
+];
+
+/* -------------------------------------------------------------------------
+   AUTH — PKCE against Azure AD, same shape as other MVBL tools.
+   Loads MSAL from CDN only when sign-in is attempted.
+   ------------------------------------------------------------------------- */
+function loadMsal(){
+  return new Promise((resolve,reject)=>{
+    if(window.msal){resolve();return;}
+    const s=document.createElement("script");
+    s.src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js";
+    s.onload=resolve; s.onerror=reject;
+    document.head.appendChild(s);
+  });
+}
+
+let msalInstance=null;
+async function signIn(){
+  try{
+    await loadMsal();
+    msalInstance = new msal.PublicClientApplication({
+      auth:{
+        clientId: CONFIG.clientId,
+        authority:`https://login.microsoftonline.com/${CONFIG.tenantId}`,
+        redirectUri: CONFIG.redirectUri
+      }
+    });
+    await msalInstance.initialize();
+    const result = await msalInstance.loginPopup({
+      scopes:["Sites.Read.All","Files.Read.All"]
+    });
+    accessToken = result.accessToken;
+    USE_DEMO = false;
+    document.getElementById("authStatus").textContent = "Signed in as " + result.account.username;
+    document.getElementById("signInBtn").textContent = "Sign out";
+    document.getElementById("configBanner").classList.remove("show");
+    await loadAllFromSharePoint();
+  }catch(err){
+    console.error("Sign-in failed, staying in demo mode:", err);
+    document.getElementById("configBanner").classList.add("show");
+  }
+}
+document.getElementById("signInBtn").addEventListener("click", signIn);
+
+/* -------------------------------------------------------------------------
+   GRAPH HELPERS — fill in once CONFIG above is set and sign-in works.
+   ------------------------------------------------------------------------- */
+async function graphGet(path){
+  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`,{
+    headers:{ Authorization:`Bearer ${accessToken}` }
+  });
+  if(!res.ok) throw new Error(`Graph error ${res.status} on ${path}`);
+  return res.json();
+}
+
+async function getSiteId(){
+  const site = await graphGet(`/sites/${CONFIG.siteHostname}:/sites/${CONFIG.siteName}`);
+  return site.id;
+}
+
+async function loadAllFromSharePoint(){
+  try{
+    const siteId = await getSiteId();
+
+    // Routes list -> AM/PM overview tab
+    // Expected fields: Route, DepotStart, FirstStopDeparture, StopOrder, StartLocation, DepartureTime, PMStopOrder, Pax, Bus, Driver, Status
+    const routesList = await graphGet(`/sites/${siteId}/lists/${CONFIG.lists.routes}/items?expand=fields`);
+    const allRoutes = routesList.value.map(i=>i.fields);
+
+    const amRoutes = allRoutes.map(f=>({
+      route:f.Route, depotStart:f.DepotStart, firstStopDeparture:f.FirstStopDeparture,
+      stopOrder:f.StopOrder, pax:f.Pax, bus:f.Bus, driver:f.Driver, status:(f.Status||"ok").toLowerCase()
+    }));
+    const pmRoutes = allRoutes.map(f=>({
+      route:f.Route, startLocation:f.StartLocation, departureTime:f.DepartureTime,
+      stopOrder:f.PMStopOrder, pax:f.Pax, bus:f.Bus, driver:f.Driver, status:(f.Status||"ok").toLowerCase()
+    }));
+
+    // Contacts list -> Contact Name, Phone Number
+    const contactsList = await graphGet(`/sites/${siteId}/lists/${CONFIG.lists.contacts}/items?expand=fields`);
+    const contacts = contactsList.value.map(i=>({
+      name:i.fields.Name, phone:i.fields.Phone
+    }));
+
+    // Document libraries — manifests and route info (route instructions / turn-by-turn nav)
+    const drive = await graphGet(`/sites/${siteId}/drives`);
+    const manifestDrive = drive.value.find(d=>d.name===CONFIG.manifestLibrary) || drive.value[0];
+    const items = await graphGet(`/drives/${manifestDrive.id}/root/children`);
+    const manifests = items.value.filter(f=>f.file).map(f=>({
+      name:f.name, modified:new Date(f.lastModifiedDateTime).toLocaleDateString(),
+      webUrl:f.webUrl, downloadUrl:f["@microsoft.graph.downloadUrl"], id:f.id, driveId:manifestDrive.id
+    }));
+
+    const routeInfoDrive = drive.value.find(d=>d.name===CONFIG.routeInfoLibrary);
+    let routeInfo = [];
+    if(routeInfoDrive){
+      const routeItems = await graphGet(`/drives/${routeInfoDrive.id}/root/children`);
+      routeInfo = routeItems.value.filter(f=>f.file).map(f=>({
+        name:f.name, modified:new Date(f.lastModifiedDateTime).toLocaleDateString(),
+        webUrl:f.webUrl, downloadUrl:f["@microsoft.graph.downloadUrl"], id:f.id, driveId:routeInfoDrive.id
+      }));
+    }
+
+    renderOverview(amRoutes, pmRoutes);
+    renderRoutes(routeInfo);
+    renderContacts(contacts);
+    renderManifests(manifests);
+    renderBusminderLinks();
+  }catch(err){
+    console.error("Failed to load SharePoint data, falling back to demo:", err);
+    document.getElementById("configBanner").classList.add("show");
+    renderAllDemo();
+  }
+}
+
+/* -------------------------------------------------------------------------
+   RENDERING
+   ------------------------------------------------------------------------- */
+function statusPill(status){
+  const map = { ok:["ok","Running"], warn:["warn","Delayed"], off:["off","Cancelled"] };
+  const [cls,label] = map[status] || map.ok;
+  return `<span class="status-pill ${cls}">${label}</span>`;
+}
+
+let currentRun = "am";
+let currentView = "grouped"; // "grouped" | "list"
+
+function overviewRowCells(r){
+  return currentRun === "am" ? `
+      <td>${r.route}</td>
+      <td class="num">${r.depotStart}</td>
+      <td class="num">${r.firstStopDeparture}</td>
+      <td class="num">${r.pax}</td>` : `
+      <td>${r.route}</td>
+      <td>${r.startLocation}</td>
+      <td class="num">${r.departureTime}</td>
+      <td class="num">${r.pax}</td>`;
+}
+
+function overviewRowCellsWithStopOrder(r){
+  return currentRun === "am" ? `
+      <td>${r.route}</td>
+      <td class="num">${r.depotStart}</td>
+      <td class="num">${r.firstStopDeparture}</td>
+      <td>${r.stopOrder||"—"}</td>
+      <td class="num">${r.pax}</td>` : `
+      <td>${r.route}</td>
+      <td>${r.startLocation}</td>
+      <td class="num">${r.departureTime}</td>
+      <td>${r.stopOrder||"—"}</td>
+      <td class="num">${r.pax}</td>`;
+}
+
+function renderOverview(amRoutes, pmRoutes){
+  amRoutes = amRoutes || window._amCache || demo.am;
+  pmRoutes = pmRoutes || window._pmCache || demo.pm;
+  window._amCache = amRoutes;
+  window._pmCache = pmRoutes;
+
+  const head = document.getElementById("overviewHead");
+  const body = document.getElementById("overviewBody");
+  const search = document.getElementById("overviewSearch").value.toLowerCase();
+  const rows = currentRun === "am" ? amRoutes : pmRoutes;
+  const baseCols = currentRun === "am"
+    ? [["Route",""],["Depot Start Time",""],["First Stop Departure",""],["Pax",""]]
+    : [["Route",""],["Start Location",""],["Departure Time",""],["Pax",""]];
+
+  const filtered = rows.filter(r=>
+    !search || `${r.route} ${r.driver||""} ${r.bus||""}`.toLowerCase().includes(search)
+  );
+  document.getElementById("overviewCount").textContent = `${filtered.length} route${filtered.length===1?"":"s"}`;
+
+  if(currentView === "list"){
+    head.innerHTML = currentRun === "am" ? `
+      <tr>
+        <th>Route</th>
+        <th>Depot Start Time</th>
+        <th>First Stop Departure</th>
+        <th>Stop Order</th>
+        <th>Pax</th>
+      </tr>` : `
+      <tr>
+        <th>Route</th>
+        <th>Start Location</th>
+        <th>Departure Time</th>
+        <th>Stop Order</th>
+        <th>Pax</th>
+      </tr>`;
+
+    body.innerHTML = filtered.length ? filtered.map(r=>`<tr>${overviewRowCellsWithStopOrder(r)}</tr>`).join("")
+      : `<tr><td colspan="5"><div class="empty-state">No routes match your filters.</div></td></tr>`;
+    return;
+  }
+
+  // GROUPED view — Stop Order becomes the section heading, dropped from columns
+  head.innerHTML = `<tr>${baseCols.map(c=>`<th>${c[0]}</th>`).join("")}</tr>`;
+
+  if(!filtered.length){
+    body.innerHTML = `<tr><td colspan="${baseCols.length}"><div class="empty-state">No routes match your filters.</div></td></tr>`;
+    return;
+  }
+
+  // group by stopOrder, preserving first-seen order of each group
+  const groups = [];
+  const groupIndex = {};
+  filtered.forEach(r=>{
+    const key = r.stopOrder || "No stop order set";
+    if(!(key in groupIndex)){
+      groupIndex[key] = groups.length;
+      groups.push({ key, rows:[] });
+    }
+    groups[groupIndex[key]].rows.push(r);
+  });
+
+  body.innerHTML = groups.map(g=>`
+    <tr class="group-heading"><td colspan="${baseCols.length}">${g.key}</td></tr>
+    ${g.rows.map(r=>`<tr>${overviewRowCells(r)}</tr>`).join("")}
+  `).join("");
+}
+
+document.getElementById("ampmToggle").addEventListener("click",(e)=>{
+  const btn = e.target.closest(".ampm-btn");
+  if(!btn) return;
+  document.querySelectorAll("#ampmToggle .ampm-btn").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  currentRun = btn.dataset.run;
+  renderOverview();
+});
+
+document.getElementById("viewToggle").addEventListener("click",(e)=>{
+  const btn = e.target.closest(".ampm-btn");
+  if(!btn) return;
+  document.querySelectorAll("#viewToggle .ampm-btn").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  currentView = btn.dataset.view;
+  renderOverview();
+});
+
+function renderRoutes(routeInfo){
+  const el = document.getElementById("routeList");
+  const search = document.getElementById("routeInfoSearch").value.toLowerCase();
+  const filtered = routeInfo.filter(m=>!search || m.name.toLowerCase().includes(search));
+  el.innerHTML = filtered.length ? filtered.map(m=>`
+    <div class="doc-row">
+      <div class="doc-meta">
+        <div class="doc-icon">${(m.type||m.name.split(".").pop()||"DOC").slice(0,3).toUpperCase()}</div>
+        <div>
+          <div class="doc-name">${m.name}</div>
+          <div class="doc-sub">${m.modified}</div>
+        </div>
+      </div>
+      <div class="doc-actions">
+        ${m.webUrl ? `<button onclick="window.open('${m.webUrl}','_blank')">Open</button>` : `<button disabled title="Connect SharePoint to open">Open</button>`}
+        ${m.downloadUrl ? `<button class="primary" onclick="window.open('${m.downloadUrl}','_blank')">Download</button>` : `<button class="primary" disabled title="Connect SharePoint to download">Download</button>`}
+      </div>
+    </div>
+  `).join("") : `<div class="empty-state">No route info documents match your search.</div>`;
+  window._routeInfoCache = routeInfo;
+}
+
+function renderContacts(contacts){
+  const body = document.getElementById("contactGrid");
+  const search = document.getElementById("contactSearch").value.toLowerCase();
+  const filtered = contacts.filter(c=> !search || c.name.toLowerCase().includes(search));
+  body.innerHTML = filtered.length ? filtered.map(c=>`
+    <tr>
+      <td>${c.name}</td>
+      <td class="num"><a href="tel:${c.phone}">${c.phone||"—"}</a></td>
+    </tr>
+  `).join("") : `<tr><td colspan="2"><div class="empty-state">No contacts match your search.</div></td></tr>`;
+  window._contactsCache = contacts;
+}
+
+function renderManifests(manifests){
+  const list = document.getElementById("manifestList");
+  const search = document.getElementById("manifestSearch").value.toLowerCase();
+  const filtered = manifests.filter(m=>!search || m.name.toLowerCase().includes(search));
+  list.innerHTML = filtered.length ? filtered.map(m=>`
+    <div class="doc-row">
+      <div class="doc-meta">
+        <div class="doc-icon">${(m.type||m.name.split(".").pop()||"DOC").slice(0,3).toUpperCase()}</div>
+        <div>
+          <div class="doc-name">${m.name}</div>
+          <div class="doc-sub">${m.modified}</div>
+        </div>
+      </div>
+      <div class="doc-actions">
+        ${m.webUrl ? `<button onclick="window.open('${m.webUrl}','_blank')">Open</button>` : `<button disabled title="Connect SharePoint to open">Open</button>`}
+        ${m.downloadUrl ? `<button class="primary" onclick="window.open('${m.downloadUrl}','_blank')">Download</button>` : `<button class="primary" disabled title="Connect SharePoint to download">Download</button>`}
+      </div>
+    </div>
+  `).join("") : `<div class="empty-state">No manifests match your search.</div>`;
+  window._manifestsCache = manifests;
+}
+
+function renderBusminderLinks(){
+  const el = document.getElementById("busminderLinks");
+  el.innerHTML = busminderLinks.length ? busminderLinks.map(l=>`
+    <div class="link-row">
+      <div class="link-meta">
+        <div class="link-icon">${l.icon||"🔗"}</div>
+        <div>
+          <div class="link-name">${l.name}</div>
+          <div class="link-sub">${l.sub||""}</div>
+        </div>
+      </div>
+      <a class="go" href="${l.url}" target="_blank" rel="noopener">Open</a>
+    </div>
+  `).join("") : `<div class="empty-state">No links added yet.</div>`;
+}
+
+function renderAllDemo(){
+  renderOverview(demo.am, demo.pm);
+  renderRoutes(demo.routeInfo);
+  renderContacts(demo.contacts);
+  renderManifests(demo.manifests);
+  renderBusminderLinks();
+}
+
+/* -------------------------------------------------------------------------
+   TABS
+   ------------------------------------------------------------------------- */
+document.querySelectorAll(".tab-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    document.querySelectorAll(".tab-panel").forEach(p=>p.style.display="none");
+    document.getElementById("tab-"+btn.dataset.tab).style.display="block";
+  });
+});
+
+/* -------------------------------------------------------------------------
+   LIVE FILTER LISTENERS
+   ------------------------------------------------------------------------- */
+document.getElementById("overviewSearch").addEventListener("input", ()=>renderOverview());
+document.getElementById("contactSearch").addEventListener("input", ()=>renderContacts(window._contactsCache||demo.contacts));
+document.getElementById("manifestSearch").addEventListener("input", ()=>renderManifests(window._manifestsCache||demo.manifests));
+document.getElementById("routeInfoSearch").addEventListener("input", ()=>renderRoutes(window._routeInfoCache||demo.routeInfo));
+
+/* -------------------------------------------------------------------------
+   INIT
+   ------------------------------------------------------------------------- */
+document.getElementById("configBanner").classList.add("show");
+renderAllDemo();
+</script>
+</body>
+</html>
