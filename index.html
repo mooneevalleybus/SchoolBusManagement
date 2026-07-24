@@ -466,18 +466,24 @@ async function loadAllFromSharePoint(){
 
     // Documents live in the "School Runs" library, in named subfolders (CONFIG.folders)
     const drive = await graphGet(`/sites/${siteId}/drives`);
-    const runsDrive = drive.value.find(d=>d.name===CONFIG.documentLibrary) || drive.value[0];
+    console.log("Document libraries found on this site:", drive.value.map(d=>d.name));
+    const runsDrive = drive.value.find(d=>d.name===CONFIG.documentLibrary);
+    if(!runsDrive){
+      console.error(`No library named "${CONFIG.documentLibrary}" found. Available libraries listed above — check CONFIG.documentLibrary matches one exactly (case/spacing sensitive).`);
+    }
+    const activeDrive = runsDrive || drive.value[0];
 
     async function folderFiles(folderName){
+      if(!runsDrive) return [];
       try{
         const encodedPath = encodeURIComponent(folderName).replace(/%2F/g,"/");
-        const res = await graphGet(`/drives/${runsDrive.id}/root:/${encodedPath}:/children`);
+        const res = await graphGet(`/drives/${activeDrive.id}/root:/${encodedPath}:/children`);
         return res.value.filter(f=>f.file).map(f=>({
           name:f.name, modified:new Date(f.lastModifiedDateTime).toLocaleDateString(),
-          webUrl:f.webUrl, downloadUrl:f["@microsoft.graph.downloadUrl"], id:f.id, driveId:runsDrive.id
+          webUrl:f.webUrl, downloadUrl:f["@microsoft.graph.downloadUrl"], id:f.id, driveId:activeDrive.id
         }));
       }catch(e){
-        console.warn(`Folder not found or empty: ${folderName}`, e);
+        console.warn(`Folder not found: "${folderName}" inside library "${activeDrive.name}". Check CONFIG.folders matches the actual folder name exactly.`, e);
         return [];
       }
     }
