@@ -208,7 +208,33 @@
     .toolbar select{flex:1 1 auto;}
 
     table{font-size:12.5px;}
-    th, td{padding:9px 8px;white-space:nowrap;}
+    th, td{padding:9px 8px;}
+
+    /* Card-style tables on mobile — no sideways scrolling */
+    .table-scroll{overflow-x:visible;}
+    table.responsive-table thead{display:none;}
+    table.responsive-table, table.responsive-table tbody{display:block;width:100%;}
+    table.responsive-table tr{
+      display:block;background:#FCFDFD;border:1px solid var(--line);border-radius:8px;
+      margin-bottom:10px;padding:4px 0;
+    }
+    table.responsive-table tr.group-heading{
+      background:var(--navy);border-radius:8px;padding:0;margin-bottom:6px;
+    }
+    table.responsive-table tr:hover td{background:transparent;}
+    table.responsive-table td{
+      display:flex;justify-content:space-between;align-items:center;gap:12px;
+      padding:8px 12px;border-bottom:1px solid var(--line);white-space:normal;text-align:right;
+    }
+    table.responsive-table td:last-child{border-bottom:none;}
+    table.responsive-table td::before{
+      content:attr(data-label);font-weight:700;color:var(--navy);font-size:10.5px;
+      text-transform:uppercase;letter-spacing:.3px;text-align:left;flex-shrink:0;
+    }
+    table.responsive-table td[colspan]{
+      display:block;text-align:left;white-space:normal;border-bottom:none;padding:9px 12px;
+    }
+    table.responsive-table td[colspan]::before{content:none;}
 
     .doc-row{flex-direction:column;align-items:stretch;gap:10px;}
     .doc-actions{justify-content:flex-end;}
@@ -305,7 +331,7 @@
         <span class="chip" id="overviewCount">0 routes</span>
       </div>
       <div class="table-scroll">
-        <table>
+        <table class="responsive-table">
           <thead id="overviewHead">
             <!-- populated per AM/PM -->
           </thead>
@@ -352,7 +378,7 @@
         <input type="text" id="contactSearch" placeholder="Search contacts...">
       </div>
       <div class="table-scroll">
-        <table>
+        <table class="responsive-table">
           <thead>
             <tr>
               <th>Contact Name</th>
@@ -658,28 +684,28 @@ let currentView = "grouped"; // "grouped" | "list"
 
 function overviewRowCells(r){
   return currentRun === "am" ? `
-      <td>${r.route}</td>
-      <td class="num">${r.depotStart}</td>
-      <td class="num">${r.firstStopDeparture}</td>
-      <td class="num">${r.pax}</td>` : `
-      <td>${r.route}</td>
-      <td>${r.startLocation}</td>
-      <td class="num">${r.departureTime}</td>
-      <td class="num">${r.pax}</td>`;
+      <td data-label="Route">${r.route}</td>
+      <td class="num" data-label="Depot Start Time">${r.depotStart}</td>
+      <td class="num" data-label="First Stop Departure">${r.firstStopDeparture}</td>
+      <td class="num" data-label="Pax">${r.pax}</td>` : `
+      <td data-label="Route">${r.route}</td>
+      <td data-label="Start Location">${r.startLocation}</td>
+      <td class="num" data-label="Departure Time">${r.departureTime}</td>
+      <td class="num" data-label="Pax">${r.pax}</td>`;
 }
 
 function overviewRowCellsWithStopOrder(r){
   return currentRun === "am" ? `
-      <td>${r.route}</td>
-      <td class="num">${r.depotStart}</td>
-      <td class="num">${r.firstStopDeparture}</td>
-      <td>${r.stopOrder||"—"}</td>
-      <td class="num">${r.pax}</td>` : `
-      <td>${r.route}</td>
-      <td>${r.startLocation}</td>
-      <td class="num">${r.departureTime}</td>
-      <td>${r.stopOrder||"—"}</td>
-      <td class="num">${r.pax}</td>`;
+      <td data-label="Route">${r.route}</td>
+      <td class="num" data-label="Depot Start Time">${r.depotStart}</td>
+      <td class="num" data-label="First Stop Departure">${r.firstStopDeparture}</td>
+      <td data-label="Stop Order">${r.stopOrder||"—"}</td>
+      <td class="num" data-label="Pax">${r.pax}</td>` : `
+      <td data-label="Route">${r.route}</td>
+      <td data-label="Start Location">${r.startLocation}</td>
+      <td class="num" data-label="Departure Time">${r.departureTime}</td>
+      <td data-label="Stop Order">${r.stopOrder||"—"}</td>
+      <td class="num" data-label="Pax">${r.pax}</td>`;
 }
 
 function renderOverview(amRoutes, pmRoutes){
@@ -795,8 +821,8 @@ function renderContacts(contacts){
   const filtered = contacts.filter(c=> !search || c.name.toLowerCase().includes(search));
   body.innerHTML = filtered.length ? filtered.map(c=>`
     <tr>
-      <td>${c.name}</td>
-      <td class="num"><a href="tel:${c.phone}">${c.phone||"—"}</a></td>
+      <td data-label="Contact Name">${c.name}</td>
+      <td class="num" data-label="Phone Number"><a href="tel:${c.phone}">${c.phone||"—"}</a></td>
     </tr>
   `).join("") : `<tr><td colspan="2"><div class="empty-state">No contacts match your search.</div></td></tr>`;
   window._contactsCache = contacts;
