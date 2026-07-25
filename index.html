@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>School Bus Management — MVBL</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0B2A4A">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="School Bus">
 <style>
   :root{
     --navy:#0B2A4A;
@@ -58,6 +65,15 @@
     padding:8px 14px;font-size:13px;cursor:pointer;font-weight:600;
   }
   .authbox button.secondary{background:transparent;border:1px solid #33506A;color:#CBD9E2;}
+  .last-updated{font-size:11px;color:#8FA6BA;white-space:nowrap;}
+  .refresh-btn{
+    background:transparent;border:1px solid #33506A;color:#CBD9E2;border-radius:6px;
+    padding:6px 10px;font-size:12px;cursor:pointer;font-weight:600;
+  }
+  .refresh-btn:hover{background:#16324F;}
+  .refresh-btn:disabled{opacity:0.5;cursor:default;}
+  #refreshIcon.spinning{display:inline-block;animation:spin 0.8s linear infinite;}
+  @keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
 
   /* route-line decoration */
   .route-strip{
@@ -165,6 +181,32 @@
   .config-banner.show{display:block;}
   footer{text-align:center;color:var(--text-soft);font-size:11.5px;padding:18px;}
 
+  .print-btn{
+    background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px 14px;
+    font-size:13px;font-weight:600;color:var(--navy);cursor:pointer;
+  }
+  .print-btn:hover{background:var(--teal-light);}
+
+  .print-header{display:none;}
+
+  @media print{
+    body{background:#fff;}
+    header.topbar, .gate-wrap, footer, .toolbar, .config-banner,
+    nav.tabs, .authbox{ display:none !important; }
+    main{padding:0;}
+    .panel{border:none;box-shadow:none;padding:0;}
+    .tab-panel{display:none !important;}
+    .tab-panel.printing{display:block !important;}
+    table.responsive-table tr{box-shadow:none;}
+    .doc-row .doc-actions, .link-row a.go{display:none !important;}
+    .print-header{
+      display:block;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #0B2A4A;
+    }
+    .print-header .ph-title{font-size:18px;font-weight:700;color:#0B2A4A;}
+    .print-header .ph-sub{font-size:12px;color:#5B6B74;margin-top:2px;}
+  }
+
+
   .gate-wrap{
     min-height:calc(100vh - 90px);
     display:flex;align-items:center;justify-content:center;
@@ -265,6 +307,8 @@
 </head>
 <body>
 
+<div class="print-header" id="printHeader"></div>
+
 <header class="topbar">
   <div class="topbar-inner">
     <div class="brand">
@@ -275,6 +319,8 @@
       </div>
     </div>
     <div class="authbox" id="authbox" style="display:none;">
+      <span id="lastUpdated" class="last-updated"></span>
+      <button id="refreshBtn" class="refresh-btn" title="Refresh data"><span id="refreshIcon">⟳</span> Refresh</button>
       <span id="authStatus">Not signed in</span>
       <button id="signOutBtn">Sign out</button>
     </div>
@@ -335,7 +381,11 @@
           <button class="ampm-btn" data-view="list">Full List</button>
         </div>
         <input type="text" id="overviewSearch" placeholder="Search route, driver or bus...">
+        <select id="driverFilter">
+          <option value="">All drivers</option>
+        </select>
         <span class="chip" id="overviewCount">0 routes</span>
+        <button class="print-btn" onclick="printPage('Quick Overview')">🖨 Print</button>
       </div>
       <div class="table-scroll">
         <table class="responsive-table">
@@ -359,6 +409,7 @@
           <button class="ampm-btn" data-run="pm">PM</button>
         </div>
         <input type="text" id="manifestSearch" placeholder="Search manifests...">
+        <button class="print-btn" onclick="printPage('Manifests')">🖨 Print</button>
       </div>
       <div id="manifestList"></div>
     </div>
@@ -523,18 +574,81 @@ function loadMsal(){
 let msalInstance=null;
 let pendingAccount=null;
 
+const SESSION_KEY = "schoolbus_session";
+const SESSION_DURATION_MS = 2 * 60 * 60 * 1000; // stay signed in for 2 hours
+
+function initMsal(){
+  if(msalInstance) return msalInstance;
+  msalInstance = new msal.PublicClientApplication({
+    auth:{
+      clientId: CONFIG.clientId,
+      authority:`https://login.microsoftonline.com/${CONFIG.tenantId}`,
+      redirectUri: CONFIG.redirectUri
+    },
+    cache:{
+      cacheLocation: "localStorage", // persists across reloads so silent renewal works
+      storeAuthStateInCookie: false
+    }
+  });
+  return msalInstance;
+}
+
+function saveSession(username){
+  localStorage.setItem(SESSION_KEY, JSON.stringify({ unlockedAt: Date.now(), username }));
+}
+function clearSession(){
+  localStorage.removeItem(SESSION_KEY);
+}
+function readSession(){
+  try{
+    const raw = localStorage.getItem(SESSION_KEY);
+    if(!raw) return null;
+    const s = JSON.parse(raw);
+    if(Date.now() - s.unlockedAt > SESSION_DURATION_MS){ clearSession(); return null; }
+    return s;
+  }catch(e){ return null; }
+}
+
+// On page load: if a valid (<2hr) session exists and Microsoft's own token cache can
+// silently renew, skip straight to the dashboard — no Sign in click, no PIN re-entry.
+async function tryRestoreSession(){
+  const session = readSession();
+  if(!session) return false;
+  try{
+    await loadMsal();
+    initMsal();
+    await msalInstance.initialize();
+    const accounts = msalInstance.getAllAccounts();
+    if(!accounts.length){ clearSession(); return false; }
+    const result = await msalInstance.acquireTokenSilent({
+      scopes:["Sites.Read.All","Files.Read.All"],
+      account: accounts[0]
+    });
+    accessToken = result.accessToken;
+    pendingAccount = result.account;
+    USE_DEMO = false;
+
+    document.getElementById("gateScreen").style.display = "none";
+    document.getElementById("mainNav").style.display = "flex";
+    document.getElementById("mainContent").style.display = "block";
+    document.getElementById("authbox").style.display = "flex";
+    document.getElementById("authStatus").textContent = "Signed in as " + result.account.username;
+
+    await loadAllFromSharePoint();
+    return true;
+  }catch(err){
+    console.warn("Could not silently restore session, showing sign-in gate:", err);
+    clearSession();
+    return false;
+  }
+}
+
 async function signIn(){
   const errEl = document.getElementById("gateSigninError");
   errEl.textContent = "";
   try{
     await loadMsal();
-    msalInstance = new msal.PublicClientApplication({
-      auth:{
-        clientId: CONFIG.clientId,
-        authority:`https://login.microsoftonline.com/${CONFIG.tenantId}`,
-        redirectUri: CONFIG.redirectUri
-      }
-    });
+    initMsal();
     await msalInstance.initialize();
     const result = await msalInstance.loginPopup({
       scopes:["Sites.Read.All","Files.Read.All"]
@@ -565,6 +679,7 @@ async function submitPin(){
   }
   errEl.textContent = "";
   USE_DEMO = false;
+  saveSession(pendingAccount.username);
 
   document.getElementById("gateScreen").style.display = "none";
   document.getElementById("mainNav").style.display = "flex";
@@ -581,6 +696,9 @@ function signOut(){
   accessToken = null;
   pendingAccount = null;
   USE_DEMO = true;
+  clearSession();
+  // Also clear MSAL's own cached tokens so a shared device fully signs out
+  Object.keys(localStorage).forEach(k=>{ if(k.toLowerCase().includes("msal")) localStorage.removeItem(k); });
   document.getElementById("mainNav").style.display = "none";
   document.getElementById("mainContent").style.display = "none";
   document.getElementById("authbox").style.display = "none";
@@ -590,6 +708,7 @@ function signOut(){
   document.getElementById("gatePinInput").value = "";
 }
 document.getElementById("signOutBtn").addEventListener("click", signOut);
+
 
 /* -------------------------------------------------------------------------
    GRAPH HELPERS — fill in once CONFIG above is set and sign-in works.
@@ -670,12 +789,40 @@ async function loadAllFromSharePoint(){
     renderContacts(contacts);
     renderManifests(manifestsAM, manifestsPM);
     renderBusminderLinks();
+    setLastUpdatedNow();
   }catch(err){
     console.error("Failed to load SharePoint data, falling back to demo:", err);
     document.getElementById("configBanner").classList.add("show");
     renderAllDemo();
   }
 }
+
+let lastUpdatedAt = null;
+function setLastUpdatedNow(){
+  lastUpdatedAt = new Date();
+  updateLastUpdatedText();
+}
+function updateLastUpdatedText(){
+  const el = document.getElementById("lastUpdated");
+  if(!el || !lastUpdatedAt){ if(el) el.textContent = ""; return; }
+  const mins = Math.floor((Date.now() - lastUpdatedAt.getTime())/60000);
+  el.textContent = mins < 1 ? "Updated just now" : mins === 1 ? "Updated 1 min ago" : `Updated ${mins} min ago`;
+}
+setInterval(updateLastUpdatedText, 30000); // keep the "X min ago" text fresh
+
+async function refreshData(){
+  const btn = document.getElementById("refreshBtn");
+  const icon = document.getElementById("refreshIcon");
+  btn.disabled = true;
+  icon.classList.add("spinning");
+  try{
+    await loadAllFromSharePoint();
+  }finally{
+    btn.disabled = false;
+    icon.classList.remove("spinning");
+  }
+}
+document.getElementById("refreshBtn").addEventListener("click", refreshData);
 
 /* -------------------------------------------------------------------------
    RENDERING
@@ -747,13 +894,25 @@ function renderOverview(amRoutes, pmRoutes){
   const head = document.getElementById("overviewHead");
   const body = document.getElementById("overviewBody");
   const search = document.getElementById("overviewSearch").value.toLowerCase();
+  const driverFilterEl = document.getElementById("driverFilter");
+  const selectedDriver = driverFilterEl.value;
   const rows = currentRun === "am" ? amRoutes : pmRoutes;
   const baseCols = currentRun === "am"
     ? [["Route",""],["Depot Start Time",""],["First Stop Departure",""],["Pax",""]]
     : [["Route",""],["Start Location",""],["Departure Time",""],["Pax",""]];
 
+  // Keep the driver dropdown in sync with whichever drivers exist in the current AM/PM data,
+  // without resetting the user's current selection.
+  const driverNames = [...new Set([...amRoutes, ...pmRoutes].map(r=>r.driver).filter(Boolean))].sort();
+  const optionsHtml = `<option value="">All drivers</option>` + driverNames.map(d=>`<option value="${d}">${d}</option>`).join("");
+  if(driverFilterEl.innerHTML !== optionsHtml){
+    driverFilterEl.innerHTML = optionsHtml;
+    driverFilterEl.value = driverNames.includes(selectedDriver) ? selectedDriver : "";
+  }
+
   const filtered = rows.filter(r=>
-    !search || `${r.route} ${r.driver||""} ${r.bus||""}`.toLowerCase().includes(search)
+    (!search || `${r.route} ${r.driver||""} ${r.bus||""}`.toLowerCase().includes(search)) &&
+    (!driverFilterEl.value || r.driver === driverFilterEl.value)
   );
   document.getElementById("overviewCount").textContent = `${filtered.length} route${filtered.length===1?"":"s"}`;
 
@@ -944,14 +1103,44 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
    LIVE FILTER LISTENERS
    ------------------------------------------------------------------------- */
 document.getElementById("overviewSearch").addEventListener("input", ()=>renderOverview());
+document.getElementById("driverFilter").addEventListener("change", ()=>renderOverview());
 document.getElementById("contactSearch").addEventListener("input", ()=>renderContacts(window._contactsCache||demo.contacts));
 document.getElementById("manifestSearch").addEventListener("input", ()=>renderManifests());
 document.getElementById("routeInfoSearch").addEventListener("input", ()=>renderRoutes(window._routeInfoCache||demo.routeInfo));
 
 /* -------------------------------------------------------------------------
    INIT — gate screen (sign in + PIN) is shown by default; dashboard and
-   data stay hidden until both steps succeed.
+   data stay hidden until both steps succeed. If a valid session (<2hr)
+   exists, skip straight to the dashboard instead.
    ------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------
+   PRINT — strips app chrome, prints only the active tab's content with a
+   simple printed header (school name, tab, date/time).
+   ------------------------------------------------------------------------- */
+function printPage(label){
+  const now = new Date();
+  document.getElementById("printHeader").innerHTML = `
+    <div class="ph-title">School Bus Management — ${label}</div>
+    <div class="ph-sub">Moonee Valley Bus Lines · Printed ${now.toLocaleDateString()} ${now.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}</div>
+  `;
+  document.querySelectorAll(".tab-panel").forEach(p=>p.classList.remove("printing"));
+  const active = [...document.querySelectorAll(".tab-panel")].find(p=>p.style.display !== "none");
+  if(active) active.classList.add("printing");
+  window.print();
+}
+window.addEventListener("afterprint", ()=>{
+  document.querySelectorAll(".tab-panel").forEach(p=>p.classList.remove("printing"));
+});
+
+tryRestoreSession();
+
+// Register service worker for offline app-shell support + "Add to Home Screen"
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("./sw.js").catch(err=>console.warn("Service worker registration failed:", err));
+  });
+}
+
 </script>
 </body>
 </html>
