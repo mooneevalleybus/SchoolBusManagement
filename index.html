@@ -206,6 +206,12 @@
     .print-header .ph-sub{font-size:12px;color:#5B6B74;margin-top:2px;}
   }
 
+  #printDocArea{padding:20px;}
+  #printDocArea .print-sheet{margin-bottom:28px;}
+  #printDocArea .print-sheet h3{font-size:14px;color:#0B2A4A;margin:0 0 8px;}
+  #printDocArea table{border-collapse:collapse;width:100%;font-size:11px;}
+  #printDocArea table td, #printDocArea table th{border:1px solid #999;padding:4px 6px;}
+
 
   .gate-wrap{
     min-height:calc(100vh - 90px);
@@ -308,6 +314,7 @@
 <body>
 
 <div class="print-header" id="printHeader"></div>
+<div id="printDocArea" style="display:none;"></div>
 
 <header class="topbar">
   <div class="topbar-inner">
@@ -409,7 +416,6 @@
           <button class="ampm-btn" data-run="pm">PM</button>
         </div>
         <input type="text" id="manifestSearch" placeholder="Search manifests...">
-        <button class="print-btn" onclick="printPage('Manifests')">🖨 Print</button>
       </div>
       <div id="manifestList"></div>
     </div>
@@ -570,6 +576,109 @@ function loadMsal(){
     tryLoad(primary, ()=>tryLoad(fallback, reject));
   });
 }
+
+/* -------------------------------------------------------------------------
+   DOCUMENT PRINTING — fetches the actual file (not just its listing) and
+   prints its real content: Excel sheets render as a table, PDFs print via
+   an embedded viewer. Loaded from CDN only when a Print button is used.
+   ------------------------------------------------------------------------- */
+function loadSheetJS(){
+  return new Promise((resolve,reject)=>{
+    if(window.XLSX){resolve();return;}
+    const s=document.createElement("script");
+    s.src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+    s.onload=resolve; s.onerror=reject;
+    document.head.appendChild(s);
+  });
+}
+
+// Registry so inline onclick handlers can reference full file objects (with
+// URLs) by a short id, without fragile quote-escaping in the HTML template.
+window._printableFileRegistry = window._printableFileRegistry || {};
+let _printableFileCounter = 0;
+function registerPrintableFile(fileObj){
+  const id = "pf" + (_printableFileCounter++);
+  window._printableFileRegistry[id] = fileObj;
+  return id;
+}
+
+async function printDocument(id){
+  const file = window._printableFileRegistry[id];
+  if(!file || !file.downloadUrl){
+    alert("This file isn't available to print yet — sign in to load real SharePoint documents first.");
+    return;
+  }
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  const printArea = document.getElementById("printDocArea");
+
+  try{
+    if(ext === "xlsx" || ext === "xls" || ext === "csv"){
+      await loadSheetJS();
+      const res = await fetch(file.downloadUrl);
+      const buf = await res.arrayBuffer();
+      const wb = XLSX.read(buf, { type:"array" });
+      const sections = wb.SheetNames.map(name=>{
+        const html = XLSX.utils.sheet_to_html(wb.Sheets[name], { header: "" });
+        return `<div class="print-sheet"><h3>${name}</h3>${html}</div>`;
+      }).join("");
+      printArea.innerHTML = sections;
+      printWithArea(file.name, printArea);
+    } else if(ext === "pdf"){
+      const res = await fetch(file.downloadUrl);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const iframe = document.createElement("iframe");
+      iframe.style.position = "fixed";
+      iframe.style.right = "0"; iframe.style.bottom = "0";
+      iframe.style.width = "0"; iframe.style.height = "0";
+      iframe.style.border = "0";
+      iframe.src = blobUrl;
+      document.body.appendChild(iframe);
+      iframe.onload = ()=>{
+        setTimeout(()=>{
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+          setTimeout(()=>{ document.body.removeChild(iframe); URL.revokeObjectURL(blobUrl); }, 60000);
+        }, 300);
+      };
+    } else {
+      // Unknown type — fall back to opening it, browser/Office viewer can print from there
+      window.open(file.webUrl || file.downloadUrl, "_blank");
+    }
+  }catch(err){
+    console.error("Failed to load document for printing:", err);
+    alert("Couldn't load this file to print. It will open in a new tab instead — print from there.");
+    window.open(file.webUrl || file.downloadUrl, "_blank");
+  }
+}
+
+// Prints a specific print-only area (used for the Excel table view), hiding
+// everything else via the same direct-JS approach as printPage().
+function printWithArea(label, areaEl){
+  const now = new Date();
+  const printHeader = document.getElementById("printHeader");
+  printHeader.innerHTML = `
+    <div class="ph-title">${label}</div>
+    <div class="ph-sub">Moonee Valley Bus Lines · Printed ${now.toLocaleDateString()} ${now.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}</div>
+  `;
+  printHeader.style.display = "block";
+  areaEl.style.display = "block";
+
+  const toHide = [
+    document.querySelector("header.topbar"),
+    document.querySelector("footer"),
+    document.getElementById("gateScreen"),
+    document.getElementById("configBanner"),
+  ].filter(Boolean);
+  document.querySelectorAll(".tab-panel").forEach(p=>toHide.push(p));
+
+  _printRestoreList = toHide.map(el=>({ el, display: el.style.display }));
+  toHide.forEach(el=>{ el.style.display = "none"; });
+
+  window.print();
+  setTimeout(()=>{ _restoreAfterPrint(); areaEl.style.display = "none"; areaEl.innerHTML = ""; }, 60000);
+}
+
 
 let msalInstance=null;
 let pendingAccount=null;
@@ -994,7 +1103,9 @@ function renderRoutes(routeInfo){
   const el = document.getElementById("routeList");
   const search = document.getElementById("routeInfoSearch").value.toLowerCase();
   const filtered = routeInfo.filter(m=>!search || m.name.toLowerCase().includes(search));
-  el.innerHTML = filtered.length ? filtered.map(m=>`
+  el.innerHTML = filtered.length ? filtered.map(m=>{
+    const id = registerPrintableFile(m);
+    return `
     <div class="doc-row">
       <div class="doc-meta">
         <div class="doc-icon">${(m.type||m.name.split(".").pop()||"DOC").slice(0,3).toUpperCase()}</div>
@@ -1006,9 +1117,10 @@ function renderRoutes(routeInfo){
       <div class="doc-actions">
         ${m.webUrl ? `<button onclick="window.open('${m.webUrl}','_blank')">Open</button>` : `<button disabled title="Connect SharePoint to open">Open</button>`}
         ${m.downloadUrl ? `<button class="primary" onclick="window.open('${m.downloadUrl}','_blank')">Download</button>` : `<button class="primary" disabled title="Connect SharePoint to download">Download</button>`}
+        ${m.downloadUrl ? `<button onclick="printDocument('${id}')">🖨 Print</button>` : `<button disabled title="Connect SharePoint to print">🖨 Print</button>`}
       </div>
     </div>
-  `).join("") : `<div class="empty-state">No route info documents match your search.</div>`;
+  `;}).join("") : `<div class="empty-state">No route info documents match your search.</div>`;
   window._routeInfoCache = routeInfo;
 }
 
@@ -1037,7 +1149,9 @@ function renderManifests(manifestsAM, manifestsPM){
   const search = document.getElementById("manifestSearch").value.toLowerCase();
   const manifests = currentManifestRun === "am" ? manifestsAM : manifestsPM;
   const filtered = manifests.filter(m=>!search || m.name.toLowerCase().includes(search));
-  list.innerHTML = filtered.length ? filtered.map(m=>`
+  list.innerHTML = filtered.length ? filtered.map(m=>{
+    const id = registerPrintableFile(m);
+    return `
     <div class="doc-row">
       <div class="doc-meta">
         <div class="doc-icon">${(m.type||m.name.split(".").pop()||"DOC").slice(0,3).toUpperCase()}</div>
@@ -1049,9 +1163,10 @@ function renderManifests(manifestsAM, manifestsPM){
       <div class="doc-actions">
         ${m.webUrl ? `<button onclick="window.open('${m.webUrl}','_blank')">Open</button>` : `<button disabled title="Connect SharePoint to open">Open</button>`}
         ${m.downloadUrl ? `<button class="primary" onclick="window.open('${m.downloadUrl}','_blank')">Download</button>` : `<button class="primary" disabled title="Connect SharePoint to download">Download</button>`}
+        ${m.downloadUrl ? `<button onclick="printDocument('${id}')">🖨 Print</button>` : `<button disabled title="Connect SharePoint to print">🖨 Print</button>`}
       </div>
     </div>
-  `).join("") : `<div class="empty-state">No manifests match your search.</div>`;
+  `;}).join("") : `<div class="empty-state">No manifests match your search.</div>`;
 }
 
 document.getElementById("manifestAmpmToggle").addEventListener("click",(e)=>{
@@ -1115,24 +1230,57 @@ document.getElementById("routeInfoSearch").addEventListener("input", ()=>renderR
    ------------------------------------------------------------------------- */
 /* -------------------------------------------------------------------------
    PRINT — strips app chrome, prints only the active tab's content with a
-   simple printed header (school name, tab, date/time).
+   simple printed header (school name, tab, date/time). Elements are hidden
+   directly via JS (not just @media print CSS) since some mobile browsers
+   don't reliably apply print stylesheets through their share-sheet print flow.
    ------------------------------------------------------------------------- */
+let _printRestoreList = [];
+
 function printPage(label){
   const now = new Date();
-  document.getElementById("printHeader").innerHTML = `
+  const printHeader = document.getElementById("printHeader");
+  printHeader.innerHTML = `
     <div class="ph-title">School Bus Management — ${label}</div>
     <div class="ph-sub">Moonee Valley Bus Lines · Printed ${now.toLocaleDateString()} ${now.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}</div>
   `;
-  document.querySelectorAll(".tab-panel").forEach(p=>p.classList.remove("printing"));
-  const active = [...document.querySelectorAll(".tab-panel")].find(p=>p.style.display !== "none");
-  if(active) active.classList.add("printing");
+  printHeader.style.display = "block";
+
+  const activeTabPanel = [...document.querySelectorAll(".tab-panel")].find(p=>p.style.display !== "none")
+    || document.getElementById("tab-overview");
+
+  const toHide = [
+    document.querySelector("header.topbar"),
+    document.querySelector("footer"),
+    document.getElementById("gateScreen"),
+    document.getElementById("configBanner"),
+  ].filter(Boolean);
+
+  // Hide the toolbar (search/filters/print button) and action buttons within the panel being printed
+  activeTabPanel.querySelectorAll(".toolbar, .doc-actions, .link-row a.go").forEach(el=>toHide.push(el));
+
+  // Explicitly hide every other tab panel too, regardless of their current inline style
+  document.querySelectorAll(".tab-panel").forEach(p=>{ if(p !== activeTabPanel) toHide.push(p); });
+
+  _printRestoreList = toHide.map(el=>({ el, display: el.style.display }));
+  toHide.forEach(el=>{ el.style.display = "none"; });
+
   window.print();
+
+  // Fallback in case 'afterprint' doesn't fire (some mobile browsers) — long
+  // enough not to interrupt anyone still using the print dialog.
+  setTimeout(_restoreAfterPrint, 60000);
 }
-window.addEventListener("afterprint", ()=>{
-  document.querySelectorAll(".tab-panel").forEach(p=>p.classList.remove("printing"));
-});
+
+function _restoreAfterPrint(){
+  _printRestoreList.forEach(({el, display})=>{ el.style.display = display; });
+  _printRestoreList = [];
+  const printHeader = document.getElementById("printHeader");
+  if(printHeader) printHeader.style.display = "none";
+}
+window.addEventListener("afterprint", _restoreAfterPrint);
 
 tryRestoreSession();
+
 
 // Register service worker for offline app-shell support + "Add to Home Screen"
 if("serviceWorker" in navigator){
