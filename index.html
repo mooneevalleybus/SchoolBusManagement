@@ -211,6 +211,11 @@
   #printDocArea .print-sheet h3{font-size:14px;color:#0B2A4A;margin:0 0 8px;}
   #printDocArea table{border-collapse:collapse;width:100%;font-size:11px;}
   #printDocArea table td, #printDocArea table th{border:1px solid #999;padding:4px 6px;}
+  #printDocArea .print-doc{font-family:Arial, sans-serif;font-size:12px;line-height:1.45;color:#1F2D36;}
+  #printDocArea .print-doc h1{font-size:18px;color:#0B2A4A;}
+  #printDocArea .print-doc h2{font-size:15px;color:#0B2A4A;}
+  #printDocArea .print-doc table{border-collapse:collapse;width:100%;margin:10px 0;}
+  #printDocArea .print-doc table td, #printDocArea .print-doc table th{border:1px solid #AAAAAA;padding:5px 8px;}
 
 
   .gate-wrap{
@@ -592,6 +597,16 @@ function loadSheetJS(){
   });
 }
 
+function loadMammoth(){
+  return new Promise((resolve,reject)=>{
+    if(window.mammoth){resolve();return;}
+    const s=document.createElement("script");
+    s.src="https://cdn.jsdelivr.net/npm/mammoth@1.7.0/mammoth.browser.min.js";
+    s.onload=resolve; s.onerror=reject;
+    document.head.appendChild(s);
+  });
+}
+
 // Registry so inline onclick handlers can reference full file objects (with
 // URLs) by a short id, without fragile quote-escaping in the HTML template.
 window._printableFileRegistry = window._printableFileRegistry || {};
@@ -622,6 +637,13 @@ async function printDocument(id){
         return `<div class="print-sheet"><h3>${name}</h3>${html}</div>`;
       }).join("");
       printArea.innerHTML = sections;
+      printWithArea(file.name, printArea);
+    } else if(ext === "docx"){
+      await loadMammoth();
+      const res = await fetch(file.downloadUrl);
+      const buf = await res.arrayBuffer();
+      const result = await mammoth.convertToHtml({ arrayBuffer: buf });
+      printArea.innerHTML = `<div class="print-doc">${result.value}</div>`;
       printWithArea(file.name, printArea);
     } else if(ext === "pdf"){
       const res = await fetch(file.downloadUrl);
